@@ -40,6 +40,14 @@ markdown = [
     "weasyprint>=60.0",
     "pygments>=2.10.0",
 ]
+server = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "python-multipart>=0.0.9",
+    "asyncpg>=0.29.0",
+    "httpx>=0.27.0",
+    "pyyaml>=6.0",
+]
 all = [
     "Pillow>=10.0.0",
     "reportlab>=4.0.0",
@@ -57,6 +65,8 @@ Repository = "https://github.com/HKUDS/RAG-Anything"
 Issues = "https://github.com/HKUDS/RAG-Anything/issues"
 
 [tool.uv]
+# Project uses uv as the package manager. Install: uv sync
+# With server (FastAPI): uv sync --extra server
 dev-dependencies = [
     "pytest>=6.0",
     "pytest-asyncio",
@@ -64,7 +74,6 @@ dev-dependencies = [
     "isort",
     "flake8",
     "mypy",
-    "openai",
     "python-dotenv",
 ]
 

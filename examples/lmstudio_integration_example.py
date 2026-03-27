@@ -6,19 +6,15 @@ text document processing and querying.
 
 Requirements:
 - LM Studio running locally with server enabled
-- OpenAI Python package: pip install openai
 - RAG-Anything installed: pip install raganything
 
 Environment Setup:
 Create a .env file with:
-LLM_BINDING=lmstudio
+DOC_PROCESSING_BASE_URL=http://localhost:8081
+DOC_PROCESSING_LLM_PROVIDER=lmstudio
+DOC_PROCESSING_EMBEDDING_PROVIDER=lmstudio
 LLM_MODEL=openai/gpt-oss-20b
-LLM_BINDING_HOST=http://localhost:1234/v1
-LLM_BINDING_API_KEY=lm-studio
-EMBEDDING_BINDING=lmstudio
 EMBEDDING_MODEL=text-embedding-nomic-embed-text-v1.5
-EMBEDDING_BINDING_HOST=http://localhost:1234/v1
-EMBEDDING_BINDING_API_KEY=lm-studio
 """
 
 import os
@@ -26,7 +22,6 @@ import uuid
 import asyncio
 from typing import List, Dict, Optional
 from dotenv import load_dotenv
-from openai import AsyncOpenAI
 
 # Load environment variables
 load_dotenv()
@@ -34,10 +29,12 @@ load_dotenv()
 # RAG-Anything imports
 from raganything import RAGAnything, RAGAnythingConfig
 from lightrag.utils import EmbeddingFunc
-from lightrag.llm.openai import openai_complete_if_cache
+from examples.doc_processing_helpers import (
+    build_doc_processing_client,
+    completion_func,
+    embeddings_func,
+)
 
-LM_BASE_URL = os.getenv("LLM_BINDING_HOST", "http://localhost:1234/v1")
-LM_API_KEY = os.getenv("LLM_BINDING_API_KEY", "lm-studio")
 LM_MODEL_NAME = os.getenv("LLM_MODEL", "openai/gpt-oss-20b")
 LM_EMBED_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-nomic-embed-text-v1.5")
 
@@ -49,37 +46,33 @@ async def lmstudio_llm_model_func(
     **kwargs,
 ) -> str:
     """Top-level LLM function for LightRAG (pickle-safe)."""
-    return await openai_complete_if_cache(
-        model=LM_MODEL_NAME,
+    client = build_doc_processing_client()
+    return await completion_func(
+        client,
         prompt=prompt,
         system_prompt=system_prompt,
         history_messages=history_messages or [],
-        base_url=LM_BASE_URL,
-        api_key=LM_API_KEY,
+        model=LM_MODEL_NAME,
         **kwargs,
     )
 
 
 async def lmstudio_embedding_async(texts: List[str]) -> List[List[float]]:
-    """Top-level embedding function for LightRAG (pickle-safe)."""
-    from lightrag.llm.openai import openai_embed
-
-    embeddings = await openai_embed(
+    """Top-level embedding function via doc-processing."""
+    client = build_doc_processing_client()
+    embeddings = await embeddings_func(
+        client,
         texts=texts,
         model=LM_EMBED_MODEL,
-        base_url=LM_BASE_URL,
-        api_key=LM_API_KEY,
+        dimensions=768,
     )
-    return embeddings.tolist()
+    return embeddings
 
 
 class LMStudioRAGIntegration:
     """Integration class for LM Studio with RAG-Anything."""
 
     def __init__(self):
-        # LM Studio configuration using standard LLM_BINDING variables
-        self.base_url = os.getenv("LLM_BINDING_HOST", "http://localhost:1234/v1")
-        self.api_key = os.getenv("LLM_BINDING_API_KEY", "lm-studio")
         self.model_name = os.getenv("LLM_MODEL", "openai/gpt-oss-20b")
         self.embedding_model = os.getenv(
             "EMBEDDING_MODEL", "text-embedding-nomic-embed-text-v1.5"
@@ -100,67 +93,45 @@ class LMStudioRAGIntegration:
         self.rag = None
 
     async def test_connection(self) -> bool:
-        """Test LM Studio connection."""
+        """Test doc-processing connection and configured models."""
         try:
-            print(f"🔌 Testing LM Studio connection at: {self.base_url}")
-            client = AsyncOpenAI(base_url=self.base_url, api_key=self.api_key)
-            models = await client.models.list()
-            print(f"✅ Connected successfully! Found {len(models.data)} models")
-
-            # Show available models
-            print("📊 Available models:")
-            for i, model in enumerate(models.data[:5]):
-                marker = "🎯" if model.id == self.model_name else "  "
-                print(f"{marker} {i+1}. {model.id}")
-
-            if len(models.data) > 5:
-                print(f"  ... and {len(models.data) - 5} more models")
+            dp_client = build_doc_processing_client()
+            print("🔌 Testing doc-processing connection")
+            models = await dp_client.models()
+            model_list = models.get("models", [])
+            print(f"✅ Connected successfully! Found {len(model_list)} configured models")
+            print("📊 Configured models:")
+            for i, model in enumerate(model_list[:5]):
+                marker = "🎯" if model == self.model_name else "  "
+                print(f"{marker} {i+1}. {model}")
 
             return True
         except Exception as e:
             print(f"❌ Connection failed: {str(e)}")
             print("\n💡 Troubleshooting tips:")
-            print("1. Ensure LM Studio is running")
-            print("2. Start the local server in LM Studio")
-            print("3. Load a model or enable just-in-time loading")
-            print(f"4. Verify server address: {self.base_url}")
+            print("1. Ensure doc-processing service is running")
+            print("2. Verify DOC_PROCESSING_BASE_URL in your environment")
+            print("3. Ensure doc-processing is configured with LM Studio model/provider")
             return False
-        finally:
-            try:
-                await client.close()
-            except Exception:
-                pass
 
     async def test_chat_completion(self) -> bool:
         """Test basic chat functionality."""
         try:
-            print(f"💬 Testing chat with model: {self.model_name}")
-            client = AsyncOpenAI(base_url=self.base_url, api_key=self.api_key)
-            response = await client.chat.completions.create(
-                model=self.model_name,
+            print("💬 Testing completion via doc-processing /llm/complete")
+            dp_client = build_doc_processing_client()
+            result = await dp_client.complete(
                 messages=[
                     {"role": "system", "content": "You are a helpful AI assistant."},
-                    {
-                        "role": "user",
-                        "content": "Hello! Please confirm you're working and tell me your capabilities.",
-                    },
+                    {"role": "user", "content": "Confirm the integration is working."},
                 ],
-                max_tokens=100,
-                temperature=0.7,
+                model=self.model_name,
             )
-
-            result = response.choices[0].message.content.strip()
             print("✅ Chat test successful!")
             print(f"Response: {result}")
             return True
         except Exception as e:
             print(f"❌ Chat test failed: {str(e)}")
             return False
-        finally:
-            try:
-                await client.close()
-            except Exception:
-                pass
 
     # Deprecated factory helpers removed to reduce redundancy
 

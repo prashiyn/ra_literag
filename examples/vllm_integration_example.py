@@ -10,7 +10,6 @@ PagedAttention, and optimized inference — ideal for production RAG workloads.
 
 Requirements:
 - vLLM serving a model (see: https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html)
-- OpenAI Python package: pip install openai
 - RAG-Anything installed: pip install raganything
 
 Start vLLM (example):
@@ -22,14 +21,11 @@ Start vLLM (example):
 
 Environment Setup:
 Create a .env file with:
-LLM_BINDING=vllm
+DOC_PROCESSING_BASE_URL=http://localhost:8081
+DOC_PROCESSING_LLM_PROVIDER=vllm
+DOC_PROCESSING_EMBEDDING_PROVIDER=vllm
 LLM_MODEL=Qwen/Qwen2.5-72B-Instruct
-LLM_BINDING_HOST=http://localhost:8000/v1
-LLM_BINDING_API_KEY=token-abc123
-EMBEDDING_BINDING=vllm
 EMBEDDING_MODEL=BAAI/bge-m3
-EMBEDDING_BINDING_HOST=http://localhost:8001/v1
-EMBEDDING_BINDING_API_KEY=token-abc123
 """
 
 import os
@@ -37,7 +33,6 @@ import uuid
 import asyncio
 from typing import List, Dict, Optional
 from dotenv import load_dotenv
-from openai import AsyncOpenAI
 
 # Load environment variables
 load_dotenv()
@@ -45,15 +40,14 @@ load_dotenv()
 # RAG-Anything imports
 from raganything import RAGAnything, RAGAnythingConfig
 from lightrag.utils import EmbeddingFunc
-from lightrag.llm.openai import openai_complete_if_cache
+from examples.doc_processing_helpers import (
+    build_doc_processing_client,
+    completion_func,
+    embeddings_func,
+)
 
-# vLLM configuration from environment variables
-VLLM_BASE_URL = os.getenv("LLM_BINDING_HOST", "http://localhost:8000/v1")
-VLLM_API_KEY = os.getenv("LLM_BINDING_API_KEY", "token-abc123")
 VLLM_MODEL_NAME = os.getenv("LLM_MODEL", "Qwen/Qwen2.5-72B-Instruct")
 VLLM_EMBED_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3")
-VLLM_EMBED_BASE_URL = os.getenv("EMBEDDING_BINDING_HOST", "http://localhost:8001/v1")
-VLLM_EMBED_API_KEY = os.getenv("EMBEDDING_BINDING_API_KEY", "token-abc123")
 
 
 async def vllm_llm_model_func(
@@ -64,48 +58,37 @@ async def vllm_llm_model_func(
 ) -> str:
     """Top-level LLM function for LightRAG (pickle-safe).
 
-    Uses openai_complete_if_cache since vLLM exposes an OpenAI-compatible API.
+    Uses doc-processing `/llm/complete` as the completion entry point.
     """
-    return await openai_complete_if_cache(
-        model=VLLM_MODEL_NAME,
+    client = build_doc_processing_client()
+    return await completion_func(
+        client,
         prompt=prompt,
         system_prompt=system_prompt,
         history_messages=history_messages or [],
-        base_url=VLLM_BASE_URL,
-        api_key=VLLM_API_KEY,
+        model=VLLM_MODEL_NAME,
         **kwargs,
     )
 
 
 async def vllm_embedding_async(texts: List[str]) -> List[List[float]]:
-    """Top-level embedding function for LightRAG (pickle-safe).
-
-    Connects to vLLM's embedding endpoint (may run on a separate port).
-    """
-    from lightrag.llm.openai import openai_embed
-
-    embeddings = await openai_embed(
+    """Top-level embedding function via doc-processing."""
+    client = build_doc_processing_client()
+    embeddings = await embeddings_func(
+        client,
         texts=texts,
         model=VLLM_EMBED_MODEL,
-        base_url=VLLM_EMBED_BASE_URL,
-        api_key=VLLM_EMBED_API_KEY,
+        dimensions=1024,
     )
-    return embeddings.tolist()
+    return embeddings
 
 
 class VLLMRAGIntegration:
     """Integration class for vLLM with RAG-Anything."""
 
     def __init__(self):
-        # vLLM configuration using standard LLM_BINDING variables
-        self.base_url = os.getenv("LLM_BINDING_HOST", "http://localhost:8000/v1")
-        self.api_key = os.getenv("LLM_BINDING_API_KEY", "token-abc123")
         self.model_name = os.getenv("LLM_MODEL", "Qwen/Qwen2.5-72B-Instruct")
         self.embedding_model = os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3")
-        self.embedding_base_url = os.getenv(
-            "EMBEDDING_BINDING_HOST", "http://localhost:8001/v1"
-        )
-        self.embedding_api_key = os.getenv("EMBEDDING_BINDING_API_KEY", "token-abc123")
 
         # RAG-Anything configuration
         # Use a fresh working directory each run to avoid legacy doc_status schema conflicts
@@ -122,68 +105,45 @@ class VLLMRAGIntegration:
         self.rag = None
 
     async def test_connection(self) -> bool:
-        """Test vLLM connection and list available models."""
+        """Test doc-processing connection and list configured models."""
         try:
-            print(f"🔌 Testing vLLM connection at: {self.base_url}")
-            client = AsyncOpenAI(base_url=self.base_url, api_key=self.api_key)
-            models = await client.models.list()
-            print(f"✅ Connected successfully! Found {len(models.data)} models")
-
-            # Show available models
-            print("📊 Available models:")
-            for i, model in enumerate(models.data[:5]):
-                marker = "🎯" if model.id == self.model_name else "  "
-                print(f"{marker} {i+1}. {model.id}")
-
-            if len(models.data) > 5:
-                print(f"  ... and {len(models.data) - 5} more models")
+            dp_client = build_doc_processing_client()
+            print("🔌 Testing doc-processing connection")
+            models = await dp_client.models()
+            model_list = models.get("models", [])
+            print(f"✅ Connected successfully! Found {len(model_list)} configured models")
+            print("📊 Configured models:")
+            for i, model in enumerate(model_list[:5]):
+                marker = "🎯" if model == self.model_name else "  "
+                print(f"{marker} {i+1}. {model}")
 
             return True
         except Exception as e:
             print(f"❌ Connection failed: {str(e)}")
             print("\n💡 Troubleshooting tips:")
-            print("1. Ensure vLLM server is running:")
-            print("   vllm serve Qwen/Qwen2.5-72B-Instruct")
-            print(f"2. Verify server address: {self.base_url}")
-            print("3. Check that the model has finished loading")
-            print("4. If using authentication, verify your API key")
+            print("1. Ensure doc-processing service is running")
+            print("2. Verify DOC_PROCESSING_BASE_URL in your environment")
+            print("3. Ensure doc-processing is configured with your vLLM model/provider")
             return False
-        finally:
-            try:
-                await client.close()
-            except Exception:
-                pass
 
     async def test_chat_completion(self) -> bool:
         """Test basic chat functionality."""
         try:
-            print(f"💬 Testing chat with model: {self.model_name}")
-            client = AsyncOpenAI(base_url=self.base_url, api_key=self.api_key)
-            response = await client.chat.completions.create(
-                model=self.model_name,
+            print("💬 Testing completion via doc-processing /llm/complete")
+            dp_client = build_doc_processing_client()
+            result = await dp_client.complete(
                 messages=[
                     {"role": "system", "content": "You are a helpful AI assistant."},
-                    {
-                        "role": "user",
-                        "content": "Hello! Please confirm you're working and tell me your capabilities.",
-                    },
+                    {"role": "user", "content": "Confirm the integration is working."},
                 ],
-                max_tokens=100,
-                temperature=0.7,
+                model=self.model_name,
             )
-
-            result = response.choices[0].message.content.strip()
             print("✅ Chat test successful!")
             print(f"Response: {result}")
             return True
         except Exception as e:
             print(f"❌ Chat test failed: {str(e)}")
             return False
-        finally:
-            try:
-                await client.close()
-            except Exception:
-                pass
 
     def embedding_func_factory(self):
         """Create a completely serializable embedding function."""

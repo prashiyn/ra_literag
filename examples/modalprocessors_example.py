@@ -6,7 +6,7 @@ This example demonstrates how to use RAG-Anything's modal processors directly wi
 
 import asyncio
 import argparse
-from lightrag.llm.openai import openai_complete_if_cache, openai_embed
+import os
 from lightrag.utils import EmbeddingFunc
 from lightrag.kg.shared_storage import initialize_pipeline_status
 from lightrag import LightRAG
@@ -15,70 +15,47 @@ from raganything.modalprocessors import (
     TableModalProcessor,
     EquationModalProcessor,
 )
+from examples.doc_processing_helpers import (
+    build_doc_processing_client,
+    completion_func,
+    vision_completion_func,
+    embeddings_func,
+)
 
 WORKING_DIR = "./rag_storage"
 
 
-def get_llm_model_func(api_key: str, base_url: str = None):
-    return (
-        lambda prompt,
-        system_prompt=None,
-        history_messages=[],
-        **kwargs: openai_complete_if_cache(
-            "gpt-4o-mini",
-            prompt,
+def get_llm_model_func():
+    client = build_doc_processing_client()
+
+    async def _llm(prompt, system_prompt=None, history_messages=[], **kwargs):
+        return await completion_func(
+            client,
+            prompt=prompt,
             system_prompt=system_prompt,
             history_messages=history_messages,
-            api_key=api_key,
-            base_url=base_url,
             **kwargs,
         )
-    )
+
+    return _llm
 
 
-def get_vision_model_func(api_key: str, base_url: str = None):
-    return (
-        lambda prompt,
-        system_prompt=None,
-        history_messages=[],
-        image_data=None,
-        **kwargs: openai_complete_if_cache(
-            "gpt-4o",
-            "",
-            system_prompt=None,
-            history_messages=[],
-            messages=[
-                {"role": "system", "content": system_prompt} if system_prompt else None,
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{image_data}"
-                            },
-                        },
-                    ],
-                }
-                if image_data
-                else {"role": "user", "content": prompt},
-            ],
-            api_key=api_key,
-            base_url=base_url,
-            **kwargs,
-        )
-        if image_data
-        else openai_complete_if_cache(
-            "gpt-4o-mini",
-            prompt,
+def get_vision_model_func():
+    client = build_doc_processing_client()
+
+    async def _vision(
+        prompt, system_prompt=None, history_messages=[], image_data=None, **kwargs
+    ):
+        return await vision_completion_func(
+            client,
+            prompt=prompt,
             system_prompt=system_prompt,
             history_messages=history_messages,
-            api_key=api_key,
-            base_url=base_url,
+            image_data=image_data,
             **kwargs,
         )
-    )
+
+    return _vision
 
 
 async def process_image_example(lightrag: LightRAG, vision_model_func):
@@ -163,37 +140,27 @@ async def process_equation_example(lightrag: LightRAG, llm_model_func):
     print(f"Entity Info: {entity_info}")
 
 
-async def initialize_rag(api_key: str, base_url: str = None):
+async def initialize_rag():
     # Use environment variables for embedding configuration
     import os
 
     embedding_dim = int(os.getenv("EMBEDDING_DIM", "3072"))
     embedding_model = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
+    client = build_doc_processing_client()
 
     rag = LightRAG(
         working_dir=WORKING_DIR,
         embedding_func=EmbeddingFunc(
             embedding_dim=embedding_dim,
             max_token_size=8192,
-            func=lambda texts: openai_embed(
-                texts,
+            func=lambda texts: embeddings_func(
+                client,
+                texts=texts,
                 model=embedding_model,
-                api_key=api_key,
-                base_url=base_url,
+                dimensions=embedding_dim,
             ),
         ),
-        llm_model_func=lambda prompt,
-        system_prompt=None,
-        history_messages=[],
-        **kwargs: openai_complete_if_cache(
-            "gpt-4o-mini",
-            prompt,
-            system_prompt=system_prompt,
-            history_messages=history_messages,
-            api_key=api_key,
-            base_url=base_url,
-            **kwargs,
-        ),
+        llm_model_func=get_llm_model_func(),
     )
 
     await rag.initialize_storages()
@@ -205,8 +172,6 @@ async def initialize_rag(api_key: str, base_url: str = None):
 def main():
     """Main function to run the example"""
     parser = argparse.ArgumentParser(description="Modal Processors Example")
-    parser.add_argument("--api-key", required=True, help="OpenAI API key")
-    parser.add_argument("--base-url", help="Optional base URL for API")
     parser.add_argument(
         "--working-dir", "-w", default=WORKING_DIR, help="Working directory path"
     )
@@ -214,16 +179,18 @@ def main():
     args = parser.parse_args()
 
     # Run examples
-    asyncio.run(main_async(args.api_key, args.base_url))
+    asyncio.run(main_async())
 
 
-async def main_async(api_key: str, base_url: str = None):
+async def main_async():
+    if not os.getenv("DOC_PROCESSING_BASE_URL"):
+        raise ValueError("DOC_PROCESSING_BASE_URL is required")
     # Initialize LightRAG
-    lightrag = await initialize_rag(api_key, base_url)
+    lightrag = await initialize_rag()
 
     # Get model functions
-    llm_model_func = get_llm_model_func(api_key, base_url)
-    vision_model_func = get_vision_model_func(api_key, base_url)
+    llm_model_func = get_llm_model_func()
+    vision_model_func = get_vision_model_func()
 
     # Run examples
     await process_image_example(lightrag, vision_model_func)

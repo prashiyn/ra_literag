@@ -320,6 +320,8 @@ Models are downloaded automatically on first use. For manual download, refer to 
 
 ### Usage Examples
 
+> For this repository's FastAPI runtime and maintained example scripts, LLM completions and embeddings are routed via doc-processing. The low-level snippets below show direct library wiring patterns.
+
 #### 1. End-to-End Document Processing
 
 ```python
@@ -1009,10 +1011,10 @@ The `examples/` directory contains comprehensive usage examples:
 
 ```bash
 # End-to-end processing with parser selection
-python examples/raganything_example.py path/to/document.pdf --api-key YOUR_API_KEY --parser mineru
+python examples/raganything_example.py path/to/document.pdf --parser mineru
 
 # Direct modal processing
-python examples/modalprocessors_example.py --api-key YOUR_API_KEY
+python examples/modalprocessors_example.py
 
 # Office document parsing test (MinerU only)
 python examples/office_document_test.py --file path/to/document.docx
@@ -1033,6 +1035,8 @@ python examples/image_format_test.py --check-pillow --file dummy
 python examples/text_format_test.py --check-reportlab --file dummy
 ```
 
+> Examples route completions and embeddings through doc-processing. Set `DOC_PROCESSING_BASE_URL` (and provider vars) in `.env` before running them.
+
 ---
 
 ## 🔧 Configuration
@@ -1044,17 +1048,33 @@ python examples/text_format_test.py --check-reportlab --file dummy
 Create a `.env` file (refer to `.env.example`):
 
 ```bash
-OPENAI_API_KEY=your_openai_api_key
-OPENAI_BASE_URL=your_base_url  # Optional
-OUTPUT_DIR=./output             # Default output directory for parsed documents
-PARSER=mineru                   # Parser selection: mineru, docling, or paddleocr
-PARSE_METHOD=auto              # Parse method: auto, ocr, or txt
+# Doc-processing endpoint used for runtime LLM + embeddings
+DOC_PROCESSING_BASE_URL=http://localhost:8081
+DOC_PROCESSING_LLM_PROVIDER=openai
+DOC_PROCESSING_EMBEDDING_PROVIDER=openai
+
+LLM_MODEL=gpt-4o-mini
+EMBEDDING_MODEL=text-embedding-3-large
+EMBEDDING_DIM=3072
+
+OUTPUT_DIR=./output  # Default output directory for parsed documents
+PARSER=mineru        # Parser selection: mineru, docling, or paddleocr
+PARSE_METHOD=auto    # Parse method: auto, ocr, or txt
 ```
 
 **Note:** For backward compatibility, legacy environment variable names are still supported:
 - `MINERU_PARSE_METHOD` is deprecated, please use `PARSE_METHOD`
 
-> **Note**: API keys are only required for full RAG processing with LLM integration. The parsing test files (`office_document_test.py` and `image_format_test.py`) only test parser functionality and do not require API keys.
+> **Note**: This service routes completions and embeddings through doc-processing (`/llm/complete`, `/llm/embeddings`). Provider API keys are managed in doc-processing.
+
+### API service & OpenAPI spec
+
+The project includes a **FastAPI** service for multimodal RAG (query, document processing, content insert). Run it with `uv sync --extra server` and `uv run python -m app.main`. See [.cursor/skills/rag-anything-service/SKILL.md](.cursor/skills/rag-anything-service/SKILL.md) for endpoints and usage.
+
+**OpenAPI 3.0** specs are available for use in other services (client generation, API gateways, Postman, etc.):
+
+- **When the server is running**: `GET /openapi.json` or `GET /docs` (Swagger UI).
+- **Static files** (no server): Generate once with `uv run --extra server python scripts/generate_openapi.py`; output is written to `docs/openapi.json` and `docs/openapi.yaml`. See [docs/openapi.md](docs/openapi.md) for usage and examples.
 
 ### Parser Configuration
 

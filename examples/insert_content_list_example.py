@@ -22,9 +22,14 @@ import sys
 
 sys.path.append(str(Path(__file__).parent.parent))
 
-from lightrag.llm.openai import openai_complete_if_cache, openai_embed
 from lightrag.utils import EmbeddingFunc, logger, set_verbose_debug
 from raganything import RAGAnything, RAGAnythingConfig
+from examples.doc_processing_helpers import (
+    build_doc_processing_client,
+    completion_func,
+    vision_completion_func,
+    embeddings_func,
+)
 
 from dotenv import load_dotenv
 
@@ -175,8 +180,6 @@ def create_sample_content_list():
 
 
 async def demo_insert_content_list(
-    api_key: str,
-    base_url: str = None,
     working_dir: str = None,
 ):
     """
@@ -197,66 +200,41 @@ async def demo_insert_content_list(
             display_content_stats=True,  # Show content statistics
         )
 
-        # Define LLM model function
-        def llm_model_func(prompt, system_prompt=None, history_messages=[], **kwargs):
-            return openai_complete_if_cache(
-                "gpt-4o-mini",
-                prompt,
+        llm_client = build_doc_processing_client()
+
+        async def llm_model_func(prompt, system_prompt=None, history_messages=[], **kwargs):
+            return await completion_func(
+                llm_client,
+                prompt=prompt,
                 system_prompt=system_prompt,
                 history_messages=history_messages,
-                api_key=api_key,
-                base_url=base_url,
                 **kwargs,
             )
 
-        # Define vision model function for image processing
-        def vision_model_func(
+        async def vision_model_func(
             prompt, system_prompt=None, history_messages=[], image_data=None, **kwargs
         ):
-            if image_data:
-                return openai_complete_if_cache(
-                    "gpt-4o",
-                    "",
-                    system_prompt=None,
-                    history_messages=[],
-                    messages=[
-                        {"role": "system", "content": system_prompt}
-                        if system_prompt
-                        else None,
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "text", "text": prompt},
-                                {
-                                    "type": "image_url",
-                                    "image_url": {
-                                        "url": f"data:image/jpeg;base64,{image_data}"
-                                    },
-                                },
-                            ],
-                        }
-                        if image_data
-                        else {"role": "user", "content": prompt},
-                    ],
-                    api_key=api_key,
-                    base_url=base_url,
-                    **kwargs,
-                )
-            else:
-                return llm_model_func(prompt, system_prompt, history_messages, **kwargs)
+            return await vision_completion_func(
+                llm_client,
+                prompt=prompt,
+                system_prompt=system_prompt,
+                history_messages=history_messages,
+                image_data=image_data,
+                **kwargs,
+            )
 
-        # Define embedding function - using environment variables for configuration
+        # Define embedding function via doc-processing
         embedding_dim = int(os.getenv("EMBEDDING_DIM", "3072"))
         embedding_model = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
 
         embedding_func = EmbeddingFunc(
             embedding_dim=embedding_dim,
             max_token_size=8192,
-            func=lambda texts: openai_embed(
-                texts,
+            func=lambda texts: embeddings_func(
+                llm_client,
+                texts=texts,
                 model=embedding_model,
-                api_key=api_key,
-                base_url=base_url,
+                dimensions=embedding_dim,
             ),
         )
 
@@ -381,30 +359,18 @@ def main():
     parser.add_argument(
         "--working_dir", "-w", default="./rag_storage", help="Working directory path"
     )
-    parser.add_argument(
-        "--api-key",
-        default=os.getenv("LLM_BINDING_API_KEY"),
-        help="OpenAI API key (defaults to LLM_BINDING_API_KEY env var)",
-    )
-    parser.add_argument(
-        "--base-url",
-        default=os.getenv("LLM_BINDING_HOST"),
-        help="Optional base URL for API",
-    )
 
     args = parser.parse_args()
 
     # Check if API key is provided
-    if not args.api_key:
-        logger.error("Error: OpenAI API key is required")
-        logger.error("Set api key environment variable or use --api-key option")
+    if not os.getenv("DOC_PROCESSING_BASE_URL"):
+        logger.error("Error: DOC_PROCESSING_BASE_URL is required")
+        logger.error("Set DOC_PROCESSING_BASE_URL env var for doc-processing LLM/embeddings")
         return
 
     # Run the demo
     asyncio.run(
         demo_insert_content_list(
-            args.api_key,
-            args.base_url,
             args.working_dir,
         )
     )

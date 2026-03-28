@@ -187,6 +187,7 @@ class TestRAGAnythingIntegration:
         from raganything import RAGAnything, RAGAnythingConfig
         import raganything.processor as processor_module
         import asyncio
+        import time
 
         config = RAGAnythingConfig()
         config.parser_output_dir = str(tmp_path)
@@ -200,8 +201,28 @@ class TestRAGAnythingIntegration:
         async def fake_parse(
             file_path, output_dir, parse_method, display_stats, **kwargs
         ):
-            # Single text block, no multimodal content.
-            return ([{"type": "text", "text": "hello world"}], "doc-123")
+            # Mirror real parse_document callback behaviour (instance monkeypatch
+            # bypasses ProcessorMixin.parse_document, which normally dispatches).
+            mgr = rag.callback_manager
+            fp = str(file_path)
+            t0 = time.time()
+            if mgr is not None:
+                mgr.dispatch(
+                    "on_parse_start",
+                    file_path=fp,
+                    parser=rag.config.parser,
+                )
+            content_list = [{"type": "text", "text": "hello world"}]
+            doc_id = "doc-123"
+            if mgr is not None:
+                mgr.dispatch(
+                    "on_parse_complete",
+                    file_path=fp,
+                    content_blocks=len(content_list),
+                    doc_id=doc_id,
+                    duration_seconds=time.time() - t0,
+                )
+            return (content_list, doc_id)
 
         async def fake_mm(items, file_path, doc_id):
             return

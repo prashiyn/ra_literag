@@ -34,6 +34,7 @@ from raganything.processor import ProcessorMixin
 from raganything.batch import BatchMixin
 from raganything.utils import get_processor_supports
 from raganything.parser import MineruParser, SUPPORTED_PARSERS, get_parser
+from raganything.callbacks import CallbackManager
 
 # Import specialized processors
 from raganything.modalprocessors import (
@@ -93,6 +94,11 @@ class RAGAnything(QueryMixin, ProcessorMixin, BatchMixin):
     parse_cache: Optional[Any] = field(default=None, init=False)
     """Parse result cache storage using LightRAG KV storage."""
 
+    callback_manager: CallbackManager = field(
+        default_factory=CallbackManager, init=False, repr=False
+    )
+    """Processing callbacks manager (optional hooks for observability and metrics)."""
+
     _parser_installation_checked: bool = field(default=False, init=False)
     """Flag to track if parser installation has been checked."""
 
@@ -132,22 +138,42 @@ class RAGAnything(QueryMixin, ProcessorMixin, BatchMixin):
         self.logger.info(f"  Max concurrent files: {self.config.max_concurrent_files}")
 
     def close(self):
-        """Cleanup resources when object is destroyed"""
+        """Cleanup resources when object is destroyed.
+
+        Handles three common scenarios:
+        1. Inside a running async context (e.g., FastAPI shutdown) -> schedule task
+        2. No event loop in thread (typical atexit) -> create one with asyncio.run()
+        3. Event loop exists but is closed/closing (atexit race) -> create new loop
+        """
         try:
             import asyncio
 
-            # Check if there's a running event loop using get_running_loop()
-            # This is the proper way in Python 3.10+ to avoid DeprecationWarning
             try:
-                asyncio.get_running_loop()
-                # If we're in an async context, schedule cleanup
-                asyncio.create_task(self.finalize_storages())
+                loop = asyncio.get_running_loop()
             except RuntimeError:
-                # No running event loop, run cleanup synchronously
+                loop = None
+
+            if loop is not None and loop.is_running():
+                # Case 1: We're inside a running event loop, schedule cleanup task
+                loop.create_task(self.finalize_storages())
+            else:
+                # Case 2/3: No running loop. Clean up any stale loop reference
+                # so asyncio.run() can create a fresh one (Python 3.10+ raises
+                # RuntimeError if a loop is already set for the thread).
+                if loop is not None:
+                    try:
+                        loop.close()
+                    except Exception:
+                        pass
+                    asyncio.set_event_loop(None)
                 asyncio.run(self.finalize_storages())
-        except Exception as e:
-            # Use print instead of logger since logger might be cleaned up already
-            print(f"Warning: Failed to finalize RAGAnything storages: {e}")
+        except Exception:
+            # Silently ignore during interpreter shutdown - the event loop and
+            # resources are being torn down anyway, and printing may fail if
+            # stdout/stderr are already closed. This avoids the noisy
+            # "There is no current event loop in thread 'MainThread'" warning
+            # that confused users (#135).
+            pass
 
     def _create_context_config(self) -> ContextConfig:
         """Create context configuration from RAGAnything config"""

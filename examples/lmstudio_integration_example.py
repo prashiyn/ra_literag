@@ -10,9 +10,9 @@ Requirements:
 
 Environment Setup:
 Create a .env file with:
-DOC_PROCESSING_BASE_URL=http://localhost:8081
-DOC_PROCESSING_LLM_PROVIDER=lmstudio
-DOC_PROCESSING_EMBEDDING_PROVIDER=lmstudio
+LLM_SERVICE_BASE_URL=http://localhost:8081
+LLM_SERVICE_LLM_PROVIDER=lmstudio
+LLM_SERVICE_EMBEDDING_PROVIDER=lmstudio
 LLM_MODEL=openai/gpt-oss-20b
 EMBEDDING_MODEL=text-embedding-nomic-embed-text-v1.5
 """
@@ -30,7 +30,8 @@ load_dotenv()
 from raganything import RAGAnything, RAGAnythingConfig
 from lightrag.utils import EmbeddingFunc
 from examples.doc_processing_helpers import (
-    build_doc_processing_client,
+    build_doc_processing_llm_client,
+    build_doc_processing_embedding_client,
     completion_func,
     embeddings_func,
 )
@@ -46,7 +47,7 @@ async def lmstudio_llm_model_func(
     **kwargs,
 ) -> str:
     """Top-level LLM function for LightRAG (pickle-safe)."""
-    client = build_doc_processing_client()
+    client = build_doc_processing_llm_client()
     return await completion_func(
         client,
         prompt=prompt,
@@ -59,12 +60,13 @@ async def lmstudio_llm_model_func(
 
 async def lmstudio_embedding_async(texts: List[str]) -> List[List[float]]:
     """Top-level embedding function via doc-processing."""
-    client = build_doc_processing_client()
+    client = build_doc_processing_embedding_client()
+    dim = int(os.getenv("EMBEDDING_DIM", "768"))
     embeddings = await embeddings_func(
         client,
         texts=texts,
         model=LM_EMBED_MODEL,
-        dimensions=768,
+        dimensions=dim,
     )
     return embeddings
 
@@ -95,7 +97,7 @@ class LMStudioRAGIntegration:
     async def test_connection(self) -> bool:
         """Test doc-processing connection and configured models."""
         try:
-            dp_client = build_doc_processing_client()
+            dp_client = build_doc_processing_llm_client()
             print("🔌 Testing doc-processing connection")
             models = await dp_client.models()
             model_list = models.get("models", [])
@@ -110,7 +112,7 @@ class LMStudioRAGIntegration:
             print(f"❌ Connection failed: {str(e)}")
             print("\n💡 Troubleshooting tips:")
             print("1. Ensure doc-processing service is running")
-            print("2. Verify DOC_PROCESSING_BASE_URL in your environment")
+            print("2. Verify LLM_SERVICE_BASE_URL in your environment")
             print("3. Ensure doc-processing is configured with LM Studio model/provider")
             return False
 
@@ -118,7 +120,7 @@ class LMStudioRAGIntegration:
         """Test basic chat functionality."""
         try:
             print("💬 Testing completion via doc-processing /llm/complete")
-            dp_client = build_doc_processing_client()
+            dp_client = build_doc_processing_llm_client()
             result = await dp_client.complete(
                 messages=[
                     {"role": "system", "content": "You are a helpful AI assistant."},
@@ -138,7 +140,7 @@ class LMStudioRAGIntegration:
     def embedding_func_factory(self):
         """Create a completely serializable embedding function."""
         return EmbeddingFunc(
-            embedding_dim=768,  # nomic-embed-text-v1.5 default dimension
+            embedding_dim=int(os.getenv("EMBEDDING_DIM", "768")),
             max_token_size=8192,  # nomic-embed-text-v1.5 context length
             func=lmstudio_embedding_async,
         )

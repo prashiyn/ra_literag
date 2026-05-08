@@ -25,7 +25,8 @@ sys.path.append(str(Path(__file__).parent.parent))
 from lightrag.utils import EmbeddingFunc, logger, set_verbose_debug
 from raganything import RAGAnything, RAGAnythingConfig
 from examples.doc_processing_helpers import (
-    build_doc_processing_client,
+    build_doc_processing_llm_client,
+    build_doc_processing_embedding_client,
     completion_func,
     vision_completion_func,
     embeddings_func,
@@ -186,9 +187,9 @@ async def demo_insert_content_list(
     Demonstrate content list insertion and querying with RAGAnything
 
     Args:
-        api_key: OpenAI API key
-        base_url: Optional base URL for API
         working_dir: Working directory for RAG storage
+
+    Uses doc-processing for LLM and embeddings.
     """
     try:
         # Create RAGAnything configuration
@@ -200,7 +201,8 @@ async def demo_insert_content_list(
             display_content_stats=True,  # Show content statistics
         )
 
-        llm_client = build_doc_processing_client()
+        llm_client = build_doc_processing_llm_client()
+        embed_client = build_doc_processing_embedding_client()
 
         async def llm_model_func(prompt, system_prompt=None, history_messages=[], **kwargs):
             return await completion_func(
@@ -231,7 +233,7 @@ async def demo_insert_content_list(
             embedding_dim=embedding_dim,
             max_token_size=8192,
             func=lambda texts: embeddings_func(
-                llm_client,
+                embed_client,
                 texts=texts,
                 model=embedding_model,
                 dimensions=embedding_dim,
@@ -363,9 +365,9 @@ def main():
     args = parser.parse_args()
 
     # Check if API key is provided
-    if not os.getenv("DOC_PROCESSING_BASE_URL"):
-        logger.error("Error: DOC_PROCESSING_BASE_URL is required")
-        logger.error("Set DOC_PROCESSING_BASE_URL env var for doc-processing LLM/embeddings")
+    if not os.getenv("LLM_SERVICE_BASE_URL"):
+        logger.error("Error: LLM_SERVICE_BASE_URL is required")
+        logger.error("Set LLM_SERVICE_BASE_URL env var for llm-service LLM/embeddings")
         return
 
     # Run the demo

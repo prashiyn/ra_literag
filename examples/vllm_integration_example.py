@@ -21,9 +21,9 @@ Start vLLM (example):
 
 Environment Setup:
 Create a .env file with:
-DOC_PROCESSING_BASE_URL=http://localhost:8081
-DOC_PROCESSING_LLM_PROVIDER=vllm
-DOC_PROCESSING_EMBEDDING_PROVIDER=vllm
+LLM_SERVICE_BASE_URL=http://localhost:8081
+LLM_SERVICE_LLM_PROVIDER=vllm
+LLM_SERVICE_EMBEDDING_PROVIDER=vllm
 LLM_MODEL=Qwen/Qwen2.5-72B-Instruct
 EMBEDDING_MODEL=BAAI/bge-m3
 """
@@ -41,7 +41,8 @@ load_dotenv()
 from raganything import RAGAnything, RAGAnythingConfig
 from lightrag.utils import EmbeddingFunc
 from examples.doc_processing_helpers import (
-    build_doc_processing_client,
+    build_doc_processing_llm_client,
+    build_doc_processing_embedding_client,
     completion_func,
     embeddings_func,
 )
@@ -60,7 +61,7 @@ async def vllm_llm_model_func(
 
     Uses doc-processing `/llm/complete` as the completion entry point.
     """
-    client = build_doc_processing_client()
+    client = build_doc_processing_llm_client()
     return await completion_func(
         client,
         prompt=prompt,
@@ -73,12 +74,13 @@ async def vllm_llm_model_func(
 
 async def vllm_embedding_async(texts: List[str]) -> List[List[float]]:
     """Top-level embedding function via doc-processing."""
-    client = build_doc_processing_client()
+    client = build_doc_processing_embedding_client()
+    dim = int(os.getenv("EMBEDDING_DIM", "1024"))
     embeddings = await embeddings_func(
         client,
         texts=texts,
         model=VLLM_EMBED_MODEL,
-        dimensions=1024,
+        dimensions=dim,
     )
     return embeddings
 
@@ -107,7 +109,7 @@ class VLLMRAGIntegration:
     async def test_connection(self) -> bool:
         """Test doc-processing connection and list configured models."""
         try:
-            dp_client = build_doc_processing_client()
+            dp_client = build_doc_processing_llm_client()
             print("🔌 Testing doc-processing connection")
             models = await dp_client.models()
             model_list = models.get("models", [])
@@ -122,7 +124,7 @@ class VLLMRAGIntegration:
             print(f"❌ Connection failed: {str(e)}")
             print("\n💡 Troubleshooting tips:")
             print("1. Ensure doc-processing service is running")
-            print("2. Verify DOC_PROCESSING_BASE_URL in your environment")
+            print("2. Verify LLM_SERVICE_BASE_URL in your environment")
             print("3. Ensure doc-processing is configured with your vLLM model/provider")
             return False
 
@@ -130,7 +132,7 @@ class VLLMRAGIntegration:
         """Test basic chat functionality."""
         try:
             print("💬 Testing completion via doc-processing /llm/complete")
-            dp_client = build_doc_processing_client()
+            dp_client = build_doc_processing_llm_client()
             result = await dp_client.complete(
                 messages=[
                     {"role": "system", "content": "You are a helpful AI assistant."},
@@ -148,7 +150,7 @@ class VLLMRAGIntegration:
     def embedding_func_factory(self):
         """Create a completely serializable embedding function."""
         return EmbeddingFunc(
-            embedding_dim=1024,  # bge-m3 default dimension
+            embedding_dim=int(os.getenv("EMBEDDING_DIM", "1024")),
             max_token_size=8192,  # bge-m3 context length
             func=vllm_embedding_async,
         )

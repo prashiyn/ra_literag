@@ -3,7 +3,7 @@
 Generate OpenAPI 3.0 spec for the RAG-Anything API and write to docs/.
 
 Usage (from repo root):
-  uv run --extra server python scripts/generate_openapi.py
+  uv run python scripts/generate_openapi.py
 
 Output:
   docs/openapi.json  - full OpenAPI 3.0 schema

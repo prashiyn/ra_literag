@@ -6,12 +6,29 @@ from typing import Any
 from app.llm_client import DocProcessingLLMClient
 
 
-def build_doc_processing_client() -> DocProcessingLLMClient:
+def build_doc_processing_llm_client() -> DocProcessingLLMClient:
+    """Client for ``/llm/complete`` (and ``/llm/models``) with LLM provider + chat model."""
     return DocProcessingLLMClient(
-        base_url=os.getenv("DOC_PROCESSING_BASE_URL", "http://localhost:8081"),
-        provider=os.getenv("DOC_PROCESSING_LLM_PROVIDER", "openai"),
+        base_url=os.getenv("LLM_SERVICE_BASE_URL", "http://localhost:8081"),
+        provider=os.getenv("LLM_SERVICE_LLM_PROVIDER", "openai"),
         model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
     )
+
+
+def build_doc_processing_embedding_client() -> DocProcessingLLMClient:
+    """Client for ``/llm/embeddings`` with embedding provider + embedding model."""
+    llm_prov = os.getenv("LLM_SERVICE_LLM_PROVIDER", "openai")
+    embed_prov = os.getenv("LLM_SERVICE_EMBEDDING_PROVIDER", llm_prov)
+    return DocProcessingLLMClient(
+        base_url=os.getenv("LLM_SERVICE_BASE_URL", "http://localhost:8081"),
+        provider=embed_prov,
+        model=os.getenv("EMBEDDING_MODEL", "text-embedding-3-large"),
+    )
+
+
+def build_doc_processing_client() -> DocProcessingLLMClient:
+    """Backward-compatible alias for :func:`build_doc_processing_llm_client`."""
+    return build_doc_processing_llm_client()
 
 
 async def completion_func(

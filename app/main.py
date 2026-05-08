@@ -34,9 +34,9 @@ from app.config import (
     ENABLE_EQUATION_PROCESSING,
     WORKSPACE_DEFAULT,
     get_lightrag_kwargs,
-    DOC_PROCESSING_BASE_URL,
-    DOC_PROCESSING_LLM_PROVIDER,
-    DOC_PROCESSING_EMBEDDING_PROVIDER,
+    LLM_SERVICE_BASE_URL,
+    LLM_SERVICE_LLM_PROVIDER,
+    LLM_SERVICE_EMBEDDING_PROVIDER,
     LLM_MODEL,
     EMBEDDING_MODEL,
     EMBEDDING_DIM,
@@ -60,9 +60,9 @@ def _get_rag(workspace: str, db_overrides: dict | None = None) -> "RAGAnything":
     from lightrag.utils import EmbeddingFunc
     from raganything import RAGAnything, RAGAnythingConfig
 
-    if not DOC_PROCESSING_BASE_URL:
+    if not LLM_SERVICE_BASE_URL:
         raise ValueError(
-            "Set DOC_PROCESSING_BASE_URL for LLM completions via doc-processing."
+            "Set LLM_SERVICE_BASE_URL for LLM completions via llm-service."
         )
 
     lightrag_kwargs = get_lightrag_kwargs(workspace)
@@ -102,13 +102,13 @@ def _get_rag(workspace: str, db_overrides: dict | None = None) -> "RAGAnything":
     )
 
     llm_client = DocProcessingLLMClient(
-        base_url=DOC_PROCESSING_BASE_URL,
-        provider=DOC_PROCESSING_LLM_PROVIDER,
+        base_url=LLM_SERVICE_BASE_URL,
+        provider=LLM_SERVICE_LLM_PROVIDER,
         model=LLM_MODEL,
     )
     embedding_client = DocProcessingLLMClient(
-        base_url=DOC_PROCESSING_BASE_URL,
-        provider=DOC_PROCESSING_EMBEDDING_PROVIDER,
+        base_url=LLM_SERVICE_BASE_URL,
+        provider=LLM_SERVICE_EMBEDDING_PROVIDER,
         model=EMBEDDING_MODEL,
     )
 
@@ -286,8 +286,8 @@ async def health():
 @app.get("/ready", response_class=PlainTextResponse, tags=["health"])
 async def ready():
     """Readiness: 200 if doc-processing endpoint is configured."""
-    if not DOC_PROCESSING_BASE_URL:
-        raise HTTPException(status_code=503, detail="DOC_PROCESSING_BASE_URL not set")
+    if not LLM_SERVICE_BASE_URL:
+        raise HTTPException(status_code=503, detail="LLM_SERVICE_BASE_URL not set")
     return "ready"
 
 
@@ -299,8 +299,8 @@ async def config_endpoint():
         "workspace_default": WORKSPACE_DEFAULT,
         "parser": PARSER,
         "parse_method": PARSE_METHOD,
-        "doc_processing_base_url": DOC_PROCESSING_BASE_URL,
-        "doc_processing_llm_provider": DOC_PROCESSING_LLM_PROVIDER,
+        "llm_service_base_url": LLM_SERVICE_BASE_URL,
+        "llm_service_llm_provider": LLM_SERVICE_LLM_PROVIDER,
         "lightrag_kv_storage": LIGHTRAG_KV_STORAGE,
         "lightrag_vector_storage": LIGHTRAG_VECTOR_STORAGE,
         "lightrag_graph_storage": LIGHTRAG_GRAPH_STORAGE,

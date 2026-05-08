@@ -66,14 +66,12 @@ ENABLE_TABLE_PROCESSING = _env("ENABLE_TABLE_PROCESSING", "true", bool)
 ENABLE_EQUATION_PROCESSING = _env("ENABLE_EQUATION_PROCESSING", "true", bool)
 
 # ---------------------------------------------------------------------------
-# LLM / Embedding
-# - Completions: routed via doc-processing /llm/complete
-# - Embeddings: still configured via OpenAI-compatible embedding endpoint
+# LLM / Embedding (both via llm-service: /llm/complete, /llm/embeddings)
 # ---------------------------------------------------------------------------
-DOC_PROCESSING_BASE_URL = _env("DOC_PROCESSING_BASE_URL", "http://localhost:8081")
-DOC_PROCESSING_LLM_PROVIDER = _env("DOC_PROCESSING_LLM_PROVIDER", "openai")
-DOC_PROCESSING_EMBEDDING_PROVIDER = _env(
-    "DOC_PROCESSING_EMBEDDING_PROVIDER", DOC_PROCESSING_LLM_PROVIDER
+LLM_SERVICE_BASE_URL = _env("LLM_SERVICE_BASE_URL", "http://localhost:8081")
+LLM_SERVICE_LLM_PROVIDER = _env("LLM_SERVICE_LLM_PROVIDER", "openai")
+LLM_SERVICE_EMBEDDING_PROVIDER = _env(
+    "LLM_SERVICE_EMBEDDING_PROVIDER", LLM_SERVICE_LLM_PROVIDER
 )
 LLM_MODEL = _env("LLM_MODEL", "gpt-4o-mini")
 

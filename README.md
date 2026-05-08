@@ -1035,7 +1035,7 @@ python examples/image_format_test.py --check-pillow --file dummy
 python examples/text_format_test.py --check-reportlab --file dummy
 ```
 
-> Examples route completions and embeddings through doc-processing. Set `DOC_PROCESSING_BASE_URL` (and provider vars) in `.env` before running them.
+> Examples route completions and embeddings through llm-service. Set `LLM_SERVICE_BASE_URL` (and provider vars) in `.env` before running them.
 
 ---
 
@@ -1048,10 +1048,10 @@ python examples/text_format_test.py --check-reportlab --file dummy
 Create a `.env` file (refer to `.env.example`):
 
 ```bash
-# Doc-processing endpoint used for runtime LLM + embeddings
-DOC_PROCESSING_BASE_URL=http://localhost:8081
-DOC_PROCESSING_LLM_PROVIDER=openai
-DOC_PROCESSING_EMBEDDING_PROVIDER=openai
+# LLM-service endpoint used for runtime LLM + embeddings
+LLM_SERVICE_BASE_URL=http://localhost:8081
+LLM_SERVICE_LLM_PROVIDER=openai
+LLM_SERVICE_EMBEDDING_PROVIDER=openai
 
 LLM_MODEL=gpt-4o-mini
 EMBEDDING_MODEL=text-embedding-3-large

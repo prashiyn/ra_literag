@@ -54,9 +54,9 @@ All application and LightRAG settings are loaded from environment variables (see
 ## LLM / Embedding
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DOC_PROCESSING_BASE_URL` | `http://localhost:8081` | Base URL of doc-processing service used for completions and embeddings (`/llm/complete`, `/llm/embeddings`) |
-| `DOC_PROCESSING_LLM_PROVIDER` | `openai` | Provider alias passed to doc-processing (`openai`, `ollama`, etc.) |
-| `DOC_PROCESSING_EMBEDDING_PROVIDER` | same as LLM provider | Provider alias passed to doc-processing for embeddings |
+| `LLM_SERVICE_BASE_URL` | `http://localhost:8081` | Base URL of llm-service used for completions and embeddings (`/llm/complete`, `/llm/embeddings`) |
+| `LLM_SERVICE_LLM_PROVIDER` | `openai` | Provider alias passed to llm-service (`openai`, `ollama`, etc.) |
+| `LLM_SERVICE_EMBEDDING_PROVIDER` | same as LLM provider | Provider alias passed to llm-service for embeddings |
 | `LLM_MODEL` | `gpt-4o-mini` | LLM model name |
 | `EMBEDDING_MODEL` | `text-embedding-3-large` | Embedding model |
 | `EMBEDDING_DIM` | `3072` | Embedding dimension |

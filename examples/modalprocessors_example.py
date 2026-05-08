@@ -16,17 +16,18 @@ from raganything.modalprocessors import (
     EquationModalProcessor,
 )
 from examples.doc_processing_helpers import (
-    build_doc_processing_client,
+    build_doc_processing_llm_client,
+    build_doc_processing_embedding_client,
     completion_func,
     vision_completion_func,
     embeddings_func,
 )
 
-WORKING_DIR = "./rag_storage"
+DEFAULT_WORKING_DIR = "./rag_storage"
 
 
 def get_llm_model_func():
-    client = build_doc_processing_client()
+    client = build_doc_processing_llm_client()
 
     async def _llm(prompt, system_prompt=None, history_messages=[], **kwargs):
         return await completion_func(
@@ -41,7 +42,7 @@ def get_llm_model_func():
 
 
 def get_vision_model_func():
-    client = build_doc_processing_client()
+    client = build_doc_processing_llm_client()
 
     async def _vision(
         prompt, system_prompt=None, history_messages=[], image_data=None, **kwargs
@@ -140,21 +141,18 @@ async def process_equation_example(lightrag: LightRAG, llm_model_func):
     print(f"Entity Info: {entity_info}")
 
 
-async def initialize_rag():
-    # Use environment variables for embedding configuration
-    import os
-
+async def initialize_rag(working_dir: str):
     embedding_dim = int(os.getenv("EMBEDDING_DIM", "3072"))
     embedding_model = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
-    client = build_doc_processing_client()
+    embed_client = build_doc_processing_embedding_client()
 
     rag = LightRAG(
-        working_dir=WORKING_DIR,
+        working_dir=working_dir,
         embedding_func=EmbeddingFunc(
             embedding_dim=embedding_dim,
             max_token_size=8192,
             func=lambda texts: embeddings_func(
-                client,
+                embed_client,
                 texts=texts,
                 model=embedding_model,
                 dimensions=embedding_dim,
@@ -173,20 +171,18 @@ def main():
     """Main function to run the example"""
     parser = argparse.ArgumentParser(description="Modal Processors Example")
     parser.add_argument(
-        "--working-dir", "-w", default=WORKING_DIR, help="Working directory path"
+        "--working-dir", "-w", default=DEFAULT_WORKING_DIR, help="Working directory path"
     )
 
     args = parser.parse_args()
 
-    # Run examples
-    asyncio.run(main_async())
+    asyncio.run(main_async(args.working_dir))
 
 
-async def main_async():
-    if not os.getenv("DOC_PROCESSING_BASE_URL"):
-        raise ValueError("DOC_PROCESSING_BASE_URL is required")
-    # Initialize LightRAG
-    lightrag = await initialize_rag()
+async def main_async(working_dir: str):
+    if not os.getenv("LLM_SERVICE_BASE_URL"):
+        raise ValueError("LLM_SERVICE_BASE_URL is required")
+    lightrag = await initialize_rag(working_dir)
 
     # Get model functions
     llm_model_func = get_llm_model_func()
